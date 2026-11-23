@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f4ed">
+  <meta name="description" content="Một góc yên tĩnh để vuốt ve Mơ và nghe tiếng rừ rừ.">
+  <title>Góc của Mơ</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="assets/mo-art.js" defer></script>
+  <script src="assets/mo-overhead.js" defer></script>
+  <script src="assets/mo-coats.js" defer></script>
+  <script src="tail.js" defer></script>
+  <script src="fur.js" defer></script>
+  <script src="cat.js" defer></script>
+  <script src="assets/mo-sounds.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="shell" id="room" aria-label="Góc của Mơ">
+    <figure class="scene" data-view="angled" aria-label="Mơ nằm trên đệm vải xanh">
+      <img id="room-photo" alt="" draggable="false">
+      <img id="photo" alt="" fetchpriority="high" draggable="false">
+      <canvas id="scene" aria-hidden="true"></canvas>
+      <div class="hand" id="hand" aria-hidden="true">
+        <img class="hand-open" src="assets/hand.webp" alt="" draggable="false">
+        <canvas class="hand-open hand-cutout" id="fur-contact" hidden></canvas>
+        <img class="hand-grip" src="assets/hand-grip.webp" alt="" draggable="false">
+      </div>
+      <button class="cat-zone" id="cat" type="button" aria-label="Vuốt ve Mơ"></button>
+    </figure>
+
+    <div class="controls" role="group" aria-label="Tùy chọn">
+      <select id="coat" aria-label="Bộ lông" title="Bộ lông">
+        <option value="silver">Xám bạc</option>
+        <option value="amber">Vàng cam</option>
+        <option value="ink">Đen khói</option>
+        <option value="calico">Tam thể</option>
+        <option value="snow">Trắng tuyết</option>
+        <option value="tuxedo">Đen trắng</option>
+        <option value="brown">Mướp nâu</option>
+        <option value="siamese">Xiêm</option>
+      </select>
+      <details class="coat-menu" id="coat-menu">
+        <summary aria-label="Bộ lông">Xám bạc</summary>
+        <div class="coat-options" role="group" aria-label="Bộ lông"></div>
+      </details>
+      <button id="view" type="button" aria-pressed="false" aria-label="Góc nhìn từ trên xuống" title="Góc nhìn từ trên xuống" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/><ellipse cx="12" cy="12" rx="4.5" ry="3.2"/></svg>
+      </button>
+      <div class="proportion-menu">
+        <button id="proportions-toggle" type="button" aria-expanded="false" aria-controls="proportions-panel" aria-label="Chỉnh vóc dáng" title="Chỉnh vóc dáng">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h4m4 0h8M4 17h9m4 0h3"/><circle cx="10" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg>
+        </button>
+        <div class="proportions" id="proportions-panel" role="group" aria-label="Vóc dáng của Mơ" hidden>
+          <label class="proportion-row" for="cat-size">
+            <span>Kích thước <span class="proportion-value" id="size-value" aria-hidden="true">100%</span></span>
+            <input id="cat-size" type="range" min="0" max="10" step="1" value="5" aria-valuetext="100%">
+            <span class="proportion-ends" aria-hidden="true"><span>Nhỏ</span><span>To</span></span>
+          </label>
+          <label class="proportion-row" for="cat-width">
+            <span>Độ đầy đặn <span class="proportion-value" id="width-value" aria-hidden="true">100%</span></span>
+            <input id="cat-width" type="range" min="0" max="10" step="1" value="5" aria-valuetext="100%">
+            <span class="proportion-ends" aria-hidden="true"><span>Thon</span><span>Tròn</span></span>
+          </label>
+        </div>
+      </div>
+      <button id="theme" type="button" aria-pressed="false" aria-label="Chế độ ban đêm" title="Chế độ ban đêm">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="moon" d="M20.9 14.2A8.7 8.7 0 0 1 9.8 3.1 9 9 0 1 0 20.9 14.2Z"/><path class="sun" d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M19 5l-1.5 1.5m-11 11L5 19m7-11a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+      </button>
+      <button id="sound" type="button" aria-pressed="false" aria-label="Âm thanh của Mơ" title="Âm thanh của Mơ">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="sound-off" d="m17 10 4 4m0-4-4 4"/><path class="sound-on" d="M16 9a4 4 0 0 1 0 6m2-9a8 8 0 0 1 0 12"/></svg>
+      </button>
+      <button id="expand" type="button" aria-pressed="false" aria-label="Toàn màn hình" title="Toàn màn hình">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/></svg>
+      </button>
+    </div>
+  </main>
+</body>
+</html>
