@@ -280,6 +280,16 @@
     return body ?? (tailHit !== null ? "tail" : null);
   }
 
+  function rumpAt(x, y, area) {
+    const u = (x - tailRootX) / actorScaleX;
+    const v = (y - tailRootY) / actorScaleY;
+    if (area === "back" && ((u + .064) / .155) ** 2 + (v / .28) ** 2 <= 1
+      && bodyAreaAt(x, y) === "back") return true;
+    if (area !== "tail" || Math.abs(v) > .25 || u < -.10 || u > .24) return false;
+    const segment = tail.segmentAt(artX(x), artY(y), view.tailAlpha);
+    return segment !== null && segment <= .30;
+  }
+
   function trackTailStroke(x, y, time) {
     if (!tailStroke) {
       const hit = nearestTail(x, y);
@@ -631,7 +641,7 @@
     syncLayout();
   }
 
-  window.moScene = { areaAt, point, release, pet, activate, setProportions };
+  window.moScene = { areaAt, rumpAt, point, release, pet, activate, setProportions };
 
   function createRenderer() {
     const gl = canvas.getContext("webgl", { alpha: false, antialias: false, depth: false });

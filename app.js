@@ -29,6 +29,7 @@
   let audio;
   let soundEnabled = false;
   let audioPetting = false;
+  let rumpStroke;
   let greeted = false;
   let lastMeow = -Infinity;
   const recordings = window.moCatSounds;
@@ -117,6 +118,24 @@
     proportionsToggle.focus({ preventScroll: true });
   });
 
+  function makeFurRustle(context, buffer) {
+    const volume = context.createGain();
+    volume.gain.value = 0;
+    volume.connect(context.destination);
+    const tone = context.createBiquadFilter();
+    tone.type = "highshelf";
+    tone.frequency.value = 2100;
+    tone.gain.value = -3.5;
+    tone.connect(volume);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.playbackRate.value = .48;
+    source.connect(tone);
+    source.start(0, Math.random() * buffer.duration);
+    return { volume, rate: source.playbackRate, lastMotion: -Infinity, motionStart: 0, speed: 0 };
+  }
+
   function makeCatAudio() {
     const context = new Audio();
     const volume = context.createGain();
@@ -138,7 +157,58 @@
       loop.start();
       player.meows = meows;
     });
+    if (recordings.rustle) {
+      decode(recordings.rustle).then((buffer) => {
+        if (context.state !== "closed") player.rustle = makeFurRustle(context, buffer);
+      }).catch(() => {});
+    }
+    if (recordings.rump) {
+      decode(recordings.rump).then((buffer) => {
+        player.rump = buffer;
+      }).catch(() => {});
+    }
     return player;
+  }
+
+  function targetSound(gain, value, now, smoothing) {
+    if (gain.cancelAndHoldAtTime) gain.cancelAndHoldAtTime(now);
+    else {
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(gain.value, now);
+    }
+    gain.setTargetAtTime(value, now, smoothing);
+  }
+
+  function rustleFur(speed, pressure) {
+    if (!audio?.rustle) return;
+    const rustle = audio.rustle;
+    const gain = rustle.volume.gain;
+    const now = audio.context.currentTime;
+    if (!pressure) {
+      rustle.lastMotion = -Infinity;
+      targetSound(gain, 0, now, .018);
+      return;
+    }
+
+    const gap = now - rustle.lastMotion;
+    const intensity = Math.min(1, speed / 1.1);
+    const starting = gap > .15;
+    if (starting) {
+      rustle.motionStart = now;
+      rustle.speed = intensity;
+    } else {
+      rustle.speed += (intensity - rustle.speed) * (1 - Math.exp(-gap / .095));
+    }
+    rustle.lastMotion = now;
+    targetSound(rustle.rate, .48 + .52 * Math.sqrt(rustle.speed), now, starting ? .042 : .15);
+
+    const sustained = Math.max(0, Math.min(1, (now - rustle.motionStart - .18) / .36));
+    const nearStill = 1 - Math.min(1, rustle.speed / .10);
+    const level = (.29 + .12 * rustle.speed) * (1 - .44 * sustained * rustle.speed) * (1 - .84 * nearStill);
+    const hold = .095 - .044 * rustle.speed + .080 * nearStill;
+    const release = .045 - .018 * rustle.speed;
+    targetSound(gain, level, now, .048 + .040 * nearStill);
+    gain.setTargetAtTime(0, now + hold, release);
   }
 
   function purr(pressure) {
@@ -154,12 +224,7 @@
 
     const intensity = pressure > 0 ? .161 + pressure * .224 : 0;
     const gain = audio.volume.gain;
-    if (gain.cancelAndHoldAtTime) gain.cancelAndHoldAtTime(now);
-    else {
-      gain.cancelScheduledValues(now);
-      gain.setValueAtTime(gain.value, now);
-    }
-    gain.setTargetAtTime(intensity, now, intensity ? .12 : .16);
+    targetSound(gain, intensity, now, intensity ? .12 : .16);
     if (intensity) gain.setTargetAtTime(0, Math.min(now + .32, audio.purrUntil), .19);
   }
 
@@ -183,10 +248,48 @@
     source.start();
   }
 
-  function endPetSound() {
+  function endPetSound(stopRustle = true) {
     if (audioPetting) purr(0);
+    if (stopRustle) {
+      rustleFur(0, 0);
+      rumpStroke = undefined;
+    }
     audioPetting = false;
     greeted = false;
+  }
+
+  function trackRumpStroke(overRump, moving, time) {
+    if (!soundEnabled) return;
+    if (!overRump) {
+      if (rumpStroke) rumpStroke.leftAt ??= time;
+      return;
+    }
+    if (rumpStroke?.leftAt !== undefined) {
+      if (time - rumpStroke.leftAt > 160) rumpStroke = undefined;
+      else rumpStroke.leftAt = undefined;
+    }
+    if (!moving || rumpStroke?.played || !audio?.rump) return;
+    if (!rumpStroke || time - rumpStroke.lastMove > 380) {
+      rumpStroke = { start: time, lastMove: time, played: false };
+      return;
+    }
+    rumpStroke.lastMove = time;
+    if (time - rumpStroke.start < 3000) return;
+
+    rumpStroke.played = true;
+    audio.rumpSound?.stop();
+    const source = audio.context.createBufferSource();
+    const volume = audio.context.createGain();
+    source.buffer = audio.rump;
+    volume.gain.value = .24;
+    source.connect(volume).connect(audio.context.destination);
+    audio.rumpSound = source;
+    source.onended = () => {
+      source.disconnect();
+      volume.disconnect();
+      if (audio?.rumpSound === source) audio.rumpSound = undefined;
+    };
+    source.start();
   }
 
   sound.addEventListener("click", async () => {
@@ -195,6 +298,7 @@
     if (!soundEnabled) {
       endPetSound();
       audio?.call?.stop();
+      audio?.rumpSound?.stop();
       return;
     }
 
@@ -270,19 +374,27 @@
       x = Math.max(0, Math.min(1, x));
       y = Math.max(0, Math.min(1, y));
     }
-    const previous = lastPoint ?? { x, y };
+    const previous = lastPoint ?? { x, y, time: event.timeStamp };
     const dx = x - previous.x;
     const dy = y - previous.y;
     const distance = Math.hypot(dx, dy * positionInScene.metric);
     const area = visual.areaAt(x, y, true);
     const overCat = area !== null;
+    const moving = distance > 0 && event.type === "pointermove";
     const force = event.pressure > 0 && event.pressure !== .5 ? event.pressure : .5;
     const pressure = overCat ? Math.min(.95, .2 + force * .34 + distance * 8) : 0;
     visual.point(x, y, area, pressure, Math.max(-1, Math.min(1, dx * 42)), Math.max(-1, Math.min(1, dy * 42)));
 
-    lastPoint = { x, y };
-    if (pressure > 0 && (firstContact || distance > .0015)) petSound(pressure, area !== "tail");
-    else if (!overCat) endPetSound();
+    lastPoint = { x, y, time: event.timeStamp };
+    if (pressure > 0 && (firstContact || distance > .0015)) {
+      petSound(pressure, area !== "tail");
+    } else if (!overCat) endPetSound(false);
+    if (soundEnabled && pressure > 0 && moving) {
+      const elapsed = Math.max(.008, Math.min(.24, (event.timeStamp - previous.time) / 1000));
+      audioPetting = true;
+      rustleFur(distance / elapsed, pressure);
+    }
+    if (soundEnabled) trackRumpStroke(visual.rumpAt(x, y, area), moving, event.timeStamp);
   }
 
   zone.addEventListener("pointerdown", (event) => {
@@ -339,5 +451,6 @@
     if (!document.hidden) return;
     endPetSound();
     audio?.call?.stop();
+    audio?.rumpSound?.stop();
   });
 })();
