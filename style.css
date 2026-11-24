@@ -50,7 +50,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 
 .scene > img, .scene > canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
 #room-photo, #night-room-photo { object-fit: cover; }
-#night-room-photo { visibility: hidden; object-position: 18% top; }
+#night-room-photo { visibility: hidden; }
 .scene[data-night][data-night-art]:not(.is-rendered) #room-photo { visibility: hidden; }
 .scene[data-night][data-night-art]:not(.is-rendered) #night-room-photo { visibility: visible; }
 .scene[data-night]:not(.is-rendered) #photo { filter: brightness(.54) saturate(.65); }

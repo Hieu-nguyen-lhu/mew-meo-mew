@@ -2,7 +2,6 @@
   const photo = document.getElementById("photo");
   const background = document.getElementById("room-photo");
   const moonRoom = document.getElementById("night-room-photo");
-  const moonMap = new Image();
   const canvas = document.getElementById("scene");
   const scene = canvas.parentElement;
   const hand = document.getElementById("hand");
@@ -22,7 +21,7 @@
     back: { value: 0, velocity: 0 },
   };
   const roomArt = window.moArt;
-  const moonArt = window.moNightArt;
+  const moonlight = window.moMoonlight;
   const overhead = window.moOverhead;
   const silverViews = [
     { body: roomArt.body, still: roomArt.cat,
@@ -100,28 +99,16 @@
   let lastMoveAt = -Infinity;
   let lastPaint = 0;
   let renderer;
-  let moonPixels;
 
-  function roomCrop(night) {
+  function roomCrop() {
     const x = Math.min(1, stageAspect / artAspect);
     const y = Math.min(1, artAspect / stageAspect);
-    return [x, y, (1 - x) * (night ? .18 : .5), night ? 0 : (1 - y) * .5];
+    return [x, y, (1 - x) * .5, (1 - y) * .5];
   }
 
   function moonAt(x, y) {
-    if (!moonPixels) return .18;
-    const [sx, sy, ox, oy] = roomCrop(true);
-    const { width, height } = moonMap;
-    const u = Math.max(0, Math.min(width - 1, (ox + x * sx) * (width - 1)));
-    const v = Math.max(0, Math.min(height - 1, (oy + y * sy) * (height - 1)));
-    const left = Math.floor(u), top = Math.floor(v);
-    const right = Math.min(width - 1, left + 1), bottom = Math.min(height - 1, top + 1);
-    const blend = (row) => {
-      const a = moonPixels[(row * width + left) * 4];
-      return a + (moonPixels[(row * width + right) * 4] - a) * (u - left);
-    };
-    const a = blend(top);
-    return (a + (blend(bottom) - a) * (v - top)) / 255;
+    const [sx, sy, ox, oy] = roomCrop();
+    return moonlight?.at(ox + x * sx, oy + y * sy) ?? .18;
   }
 
   function bodyWidthAt(x) {
@@ -173,17 +160,16 @@
   function syncLayout() {
     if (!scene.clientHeight) return;
     stageAspect = scene.clientWidth / scene.clientHeight;
-    const night = moonArt && scene.hasAttribute("data-night");
-    const defaultScaleY = actorSize * (night ? .94 : 1) * Math.min(1, stageAspect / minimumActorAspect);
+    const defaultScaleY = actorSize * Math.min(1, stageAspect / minimumActorAspect);
     const defaultScaleX = defaultScaleY * artAspect / stageAspect;
     const [upper, lower] = heightBounds();
     actorScaleY = Math.min(defaultScaleY * catSize, .95 / (lower - upper));
     actorScaleX = actorScaleY * artAspect / stageAspect;
     const wideMargin = touchLayout.matches ? Math.max(0, (1 - 1.88 / stageAspect) * .5) : 0;
-    const idealLeft = defaultLeft + wideMargin + (night ? .154 : 0) - (actorScaleX - defaultScaleX) * .39;
+    const idealLeft = defaultLeft + wideMargin - (actorScaleX - defaultScaleX) * .39;
     const minLeft = .014 - (view.alpha?.left ?? .075) * actorScaleX;
     actorLeft = Math.max(minLeft, Math.min(idealLeft, .80 - view.rootX * actorScaleX));
-    const idealTop = .07 + (actorSize - actorScaleY) * .5 + (night ? .020 : 0);
+    const idealTop = .07 + (actorSize - actorScaleY) * .5;
     actorTop = Math.min(1 - .025 - lower * actorScaleY, Math.max(.025 - upper * actorScaleY, idealTop));
     anchorTail();
     const handWidth = .186 * artAspect / Math.max(stageAspect, minimumActorAspect);
@@ -507,11 +493,17 @@
     if (active || (renderer && !reduced.matches)) activate();
   }
 
+  function prepareFallbackMoon() {
+    if (renderer || !moonlight || moonRoom.src || !background.naturalWidth || !scene.hasAttribute("data-night")) return;
+    moonRoom.src = moonlight.fallbackRoom(background);
+  }
+
   function fallback() {
     renderer = undefined;
     furContact.hide();
     resetPose();
     scene.classList.remove("is-rendered");
+    prepareFallbackMoon();
   }
 
   function setup() {
@@ -617,7 +609,7 @@
     activate();
   });
   new ResizeObserver(syncLayout).observe(scene);
-  new MutationObserver(syncLayout).observe(scene, { attributeFilter: ["data-night"] });
+  new MutationObserver(prepareFallbackMoon).observe(scene, { attributeFilter: ["data-night"] });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) release();
     else activate();
@@ -625,23 +617,7 @@
 
   background.addEventListener("load", setup);
   background.src = roomArt.background;
-  if (moonArt) {
-    moonRoom.addEventListener("load", () => {
-      scene.setAttribute("data-night-art", "");
-      activate();
-    });
-    moonMap.addEventListener("load", () => {
-      const mapCanvas = document.createElement("canvas");
-      mapCanvas.width = moonMap.width;
-      mapCanvas.height = moonMap.height;
-      const pen = mapCanvas.getContext("2d");
-      pen.drawImage(moonMap, 0, 0);
-      moonPixels = pen.getImageData(0, 0, moonMap.width, moonMap.height).data;
-      activate();
-    });
-    moonRoom.src = moonArt.room;
-    moonMap.src = moonArt.light;
-  }
+  moonRoom.addEventListener("load", () => scene.setAttribute("data-night-art", ""));
   photo.src = view.still;
   photo.style.transformOrigin = "top left";
   syncLayout();
@@ -725,8 +701,14 @@
       varyings,
       "vec2 roomUv(vec2 p) { return uRoomCrop.zw + p * uRoomCrop.xy; }",
       "float moon(vec2 p) { return texture2D(uMoonMap, roomUv(p)).r; }",
+      moonlight?.shader ?? "vec3 moonRoomColor(vec3 rgb, float light) { return rgb; }",
       "void main() {",
-      "  if (uPass == 0) { gl_FragColor = texture2D(uArt, roomUv(vUv)); return; }",
+      "  if (uPass == 0) {",
+      "    vec4 room = texture2D(uArt, roomUv(vUv));",
+      "    if (uNight > .5) room.rgb = moonRoomColor(room.rgb, moon(vUv));",
+      "    gl_FragColor = room;",
+      "    return;",
+      "  }",
       "  if (uPass == 1 || uPass == 3) {",
       "    float across = uPass == 3 ? .035 : .009;",
       "    float a = texture2D(uArt, vUv).a * .40;",
@@ -833,7 +815,7 @@
       return result;
     }
     const roomArt = texture(background);
-    let moonTextures;
+    let moonTexture;
     const viewTextures = new Map();
     let textureView;
     let textures;
@@ -862,14 +844,14 @@
         canvas.height = height;
       }
       gl.viewport(0, 0, width, height);
-      const night = scene.hasAttribute("data-night") && moonRoom.naturalWidth > 0 && moonMap.naturalWidth > 0;
-      if (night && !moonTextures) moonTextures = { room: texture(moonRoom), light: texture(moonMap) };
+      const night = !!moonlight && scene.hasAttribute("data-night");
+      if (night && !moonTexture) moonTexture = texture(moonlight.map);
       gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, night ? moonTextures.light : roomArt);
+      gl.bindTexture(gl.TEXTURE_2D, night ? moonTexture : roomArt);
       gl.activeTexture(gl.TEXTURE0);
       gl.uniform1f(uniforms.Night, night ? 1 : 0);
       gl.uniform4f(uniforms.Actor, actorScaleX, actorScaleY, actorLeft, actorTop);
-      gl.uniform4f(uniforms.RoomCrop, ...roomCrop(night));
+      gl.uniform4f(uniforms.RoomCrop, ...roomCrop());
       gl.uniform1f(uniforms.SceneAspect, stageAspect);
       gl.uniform4fv(furPads, fur.pads);
       gl.uniform2fv(uniforms.FurFlow, fur.flow);
@@ -889,7 +871,7 @@
       gl.uniform2f(uniforms.Build, spine, bodyWidth - 1);
 
       gl.uniform1i(uniforms.Pass, 0);
-      gl.bindTexture(gl.TEXTURE_2D, night ? moonTextures.room : roomArt);
+      gl.bindTexture(gl.TEXTURE_2D, roomArt);
       gl.bindBuffer(gl.ARRAY_BUFFER, backdropQuad);
       gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
