@@ -125,17 +125,18 @@
     const voice = context.createGain();
     voice.gain.value = .36;
     voice.connect(context.destination);
-    const player = { context, volume, voice, purrUntil: 0, nextPurr: 0 };
+    const player = { context, volume, voice, purrUntil: 0, nextPurr: 0, nextMeow: 0 };
     const decode = (encoded) => context.decodeAudioData(
       Uint8Array.from(atob(encoded), (ch) => ch.charCodeAt(0)).buffer
     );
-    player.ready = Promise.all([decode(recordings.purr), decode(recordings.meow)]).then(([purr, meow]) => {
+    const voices = [recordings.meow, ...(recordings.extraMeows ?? [])];
+    player.ready = Promise.all([decode(recordings.purr), ...voices.map(decode)]).then(([purr, ...meows]) => {
       const loop = context.createBufferSource();
       loop.buffer = purr;
       loop.loop = true;
       loop.connect(volume);
       loop.start();
-      player.meow = meow;
+      player.meows = meows;
     });
     return player;
   }
@@ -151,7 +152,7 @@
       if (now >= audio.purrUntil) return;
     }
 
-    const intensity = pressure > 0 ? .115 + pressure * .16 : 0;
+    const intensity = pressure > 0 ? .161 + pressure * .224 : 0;
     const gain = audio.volume.gain;
     if (gain.cancelAndHoldAtTime) gain.cancelAndHoldAtTime(now);
     else {
@@ -166,13 +167,14 @@
     if (!soundEnabled) return;
     audioPetting = true;
     purr(pressure);
-    if (!voiceAllowed || greeted || !audio?.meow) return;
+    if (!voiceAllowed || greeted || !audio?.meows) return;
     greeted = true;
     const now = audio.context.currentTime;
     if (now - lastMeow < 8.5) return;
     lastMeow = now;
     const source = audio.context.createBufferSource();
-    source.buffer = audio.meow;
+    source.buffer = audio.meows[audio.nextMeow];
+    audio.nextMeow = (audio.nextMeow + 1) % audio.meows.length;
     source.connect(audio.voice);
     audio.call = source;
     source.onended = () => {
