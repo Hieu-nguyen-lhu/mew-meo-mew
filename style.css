@@ -49,13 +49,15 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 }
 
 .scene > img, .scene > canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
-#room-photo { object-fit: cover; }
-.scene > img, .scene > canvas, .scene .hand { filter: var(--light-filter, brightness(1)); }
+#room-photo, #night-room-photo { object-fit: cover; }
+#night-room-photo { visibility: hidden; object-position: 18% top; }
+.scene[data-night][data-night-art]:not(.is-rendered) #room-photo { visibility: hidden; }
+.scene[data-night][data-night-art]:not(.is-rendered) #night-room-photo { visibility: visible; }
+.scene[data-night]:not(.is-rendered) #photo { filter: brightness(.54) saturate(.65); }
+.scene[data-night] .hand { filter: brightness(calc(.34 + .58 * var(--moon-light, .18))) saturate(.62); }
 .scene > canvas { visibility: hidden; }
 .scene.is-rendered > canvas { visibility: visible; }
 .scene.is-rendered > img { visibility: hidden; }
-.scene[data-night] { --light-filter: brightness(.67) saturate(.7) contrast(.96); }
-.scene[data-night]::after { content: ""; position: absolute; inset: 0; background: #28447125; pointer-events: none; }
 .hand { position: absolute; top: 0; left: 0; width: var(--hand-width, 18%); isolation: isolate; pointer-events: none; opacity: 0; will-change: transform; transform-origin: top left; }
 .hand img, .hand .hand-cutout {
   position: absolute;
